@@ -11,6 +11,7 @@ import subprocess
 import numpy as np
 
 from multiprocessing import Pool
+from functools import partial
 from osgeo import gdal, ogr, osr
 from pathlib import Path
 from shapefile_funcs import *
@@ -97,38 +98,63 @@ def process_dir(dir):
     for raster in dir.iterdir():
         if not os.path.isdir(raster):
             # rename outfile to xyz_reprojected.tif
-            ds = gdal.Open(raster)
-            name = str(raster)[:-4].split("\\")[-1]
+            # ds = gdal.Open(raster)
+            # name = str(raster)[:-4].split("\\")[-1]
+            # outfile = os.path.join(OUT_DIR, f"{name}_reprojected.tif")
             
-            outfile = os.path.join(OUT_DIR, f"{name}_reprojected.tif")
-            
-            #outfile = name + suffix + file_type # Generate output file, ranmed to xyz_reprojectd.tif
-            #print(outfile)
-            reproject_raster(outfile, ds)
+            outfile = reproject_raster(raster)
             repro_raster = gdal.Open(outfile)   # Open the file of the new preojection
+
             local_max, local_x, local_y = max_point(repro_raster)   # Get max of the current raster
+
             if check_point(boundary, local_x, local_y):     # Check if point is in the boundary
                 if local_max > county_max:      # Update the county max
                     county_max = local_max
                     county_x = local_x
                     county_y = local_y
+            ds = None
     
     return county_max, county_x, county_y
 
+def get_repro_raster_list(dir):
+    """Given a directory containing LiDAR files. 
+    For all files:
+      reproject all files to lat/lon"""
+    
+    raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
+    with Pool() as pool:
+        reprojected_list = pool.map(reproject_raster, raster_list)
+    # print(reprojected_list)
+    return reprojected_list
+
 def process_dir_parallel(dir):
-    """Given a directory containing LiDAR files. For all files:
-    reproject all files to lat/lon, find the max value and cooresponding coordinates.
-    then compare results to find and return true max.
+    """
+    Given a directory containing LiDAR files. 
+    For all files:
+        Reproject all files to lat/lon
+        Filter rasters:
+            * keep rasters that have at least one corner in the boundary
+        Find the max value and cooresponding coordinates
+        Then compare results to find and return true max
     """
     suffix = "_reprojected"
     file_type = ".tif"
+
     boundary = get_boundary(shp_path)
+    buffer = buffer_boundary(boundary, 0.01)
+
     county_max = county_x = county_y = 0.0
     
-    file_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
+    # Get list of raster files (.tif files)
+    # file_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
+    reprojected_list = get_repro_raster_list(dir) # Get list of reprojected rasters
+    filtered_rasters = filter_raster_from_list(reprojected_list, boundary, buffer) # Filter rasters that are within the boundary
+
     with Pool() as pool:
-        results = pool.map(process_file, file_list) # Results is a list of tuples containing the max value and coordinates
-    
+        # process_func = partial(process_file, boundary=boundary, buffer=buffer)
+        # results = pool.map(process_func, file_list)
+        results = pool.map(process_file, filtered_rasters)  # Results is a list of tuples containing the max value and coordinates
+
     for local_max, local_x, local_y in results:
         # if check_point(boundary, local_x, local_y):     # Check if point is in the boundary
         if check_point_buffer(boundary, local_x, local_y, 0.01):     # Check if point is in the buffer
@@ -140,15 +166,45 @@ def process_dir_parallel(dir):
     return county_max, county_x, county_y
     
 def process_file(raster):
-    """Helper func for proccess parallel: Given a raster file, reproject it to lat/lon, find the max value and cooresponding coordinates."""
+    """Helper func for proccess parallel: Given a raster file, reproject it to lat/lon, find the max value and cooresponding coordinates."""    
+    from osgeo import gdal  # Ensure it's imported inside the function for safety
+    gdal.UseExceptions()
     ds = gdal.Open(raster)
-    name = str(raster)[:-4].split("\\")[-1]        
-    outfile = os.path.join(OUT_DIR, f"{name}_reprojected.tif")
-    reproject_raster(outfile, ds)
-    repro_raster = gdal.Open(outfile)   # Open the file of the new preojection
-    local_max, local_x, local_y = max_point(repro_raster)   # Get max of the current raster
+    # outfile = reproject_raster(raster)
+    # repro_raster = gdal.Open(outfile)   # Open the file of the new preojection
+    local_max, local_x, local_y = max_point(ds)   # Get max of the current raster
+    ds = None
     return local_max, local_x, local_y
 
+def filter_raster(raster, boundary, buffer):
+    """Given a raster in the same projection as the boundary(buffer), check if any of the corners of the raster are within the boundary"""
+    # xmin, xmax, ymin, ymax = get_corners(raster)
+    xmin, xmax, ymin, ymax = get_corners(raster)
+    # Check if corners are in buffer but not in boundary
+    if check_point_buffer(boundary, xmin, ymin, 0.01, buffer) or check_point_buffer(boundary, xmin, ymax, 0.01, buffer) or check_point_buffer(boundary, xmax, ymin, 0.01, buffer) or check_point_buffer(boundary, xmax, ymax, 0.01, buffer):
+        return True
+    return False
+
+def filter_raster_from_list(reprojected_list, boundary, buffer):
+    """Given a raster in the same projection as the boundary(buffer), check if any of the corners of the raster are within the boundary"""
+    print("Original number of rasters: ", len(reprojected_list))
+    # xmin, xmax, ymin, ymax = get_corners(raster)
+    
+    filtered_rasters = []
+    for raster in reprojected_list:
+        # Get corners of the raster
+        ds = gdal.Open(raster)
+        xmin, xmax, ymin, ymax = get_corners(ds)
+        # Check if corners are in buffer but not in boundary
+        if check_point_buffer(boundary, xmin, ymin, 0.01, buffer) or check_point_buffer(boundary, xmin, ymax, 0.01, buffer) or check_point_buffer(boundary, xmax, ymin, 0.01, buffer) or check_point_buffer(boundary, xmax, ymax, 0.01, buffer):
+        # if check_point(boundary, xmin, ymin) or check_point(boundary, xmin, ymax) or check_point(boundary, xmax, ymin) or check_point(boundary, xmax, ymax):
+            filtered_rasters.append(raster)
+    print("Number of rasters within boundary: ", len(filtered_rasters))
+    print(filtered_rasters)
+    return filtered_rasters
+
+    # print("Number of rasters within boundary: ", len(filtered_rasters))
+    # return filtered_rasters
 
 def check_point(boundary, x, y):
     """Given a boundary and x,y coordinates create a point and determine if it's in the boundary"""
@@ -163,14 +219,15 @@ def check_point(boundary, x, y):
         return False
         # print("The point is outside the polygon.")
     
-def check_point_buffer(boundary, x, y, buffer_distance):
+def check_point_buffer(boundary, x, y, buffer_distance, buffer=None):
     """Given a boundary and x,y coordinates create a point and determine 
     if it's in the buffer BUT NOT IN THE boundary"""
     point = ogr.Geometry(ogr.wkbPoint)
     point.AddPoint(x, y)
     point.AssignSpatialReference(None)
 
-    buffer = boundary.Buffer(buffer_distance)
+    if buffer is None:
+        buffer = boundary.Buffer(buffer_distance)
     
     if buffer.Contains(point) and not boundary.Contains(point):
         return True
@@ -250,12 +307,24 @@ def scale_boundary(dx, dy, county=None):
     return new_polygon.Clone()
 
 
-def reproject_raster(output_file, ds):
+# def reproject_raster(output_file, ds):
+def reproject_raster(raster):
     """Reproject a raster dataset to lat/lon (EPSG:4326)"""
-    ds_reprojected = gdal.Warp(output_file, ds, dstSRS="EPSG:4326")
+    from osgeo import gdal  
+    gdal.UseExceptions()
+
+    # Rename the output file to xyz_reprojected.tif
+    ds = gdal.Open(raster)
+    name = str(raster)[:-4].split("\\")[-1]        
+    outfile = os.path.join(OUT_DIR, f"{name}_reprojected.tif")
+
+    # Below this comment works 
+
+    # Reproject the raster to lat/lon
+    ds_reprojected = gdal.Warp(outfile, ds, dstSRS="EPSG:4326")
     ds = None
     ds_reprojected = None
-    # print("Reprojection complete. Output saved as:", output_file)
+    return outfile
 
 
 def get_boundary(path):

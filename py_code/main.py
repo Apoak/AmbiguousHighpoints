@@ -53,8 +53,16 @@ def main():
     """
     gdal.UseExceptions() 
     # print(process_dir(TEST_DIR))
+    
+    """
+    TESTING process_dir_parallel:
+    Creates a list of reprojected files, filters them, 
+    calculates max elevation and coordinates in the filtered raster tiles
+    """
     print(process_dir_parallel(TEST_DIR))
+    # get_shapefile_metadata(shp_path)
     # boundary = get_boundary(shp_path)
+    # print(boundary)
     # boundary = feature.GetGeometryRef()
     # print(boundary.GetGeometryType())
     # get_shapefile_metadata(shp_path)
@@ -64,7 +72,15 @@ def main():
     #buffer = buffer_boundary(reprojected_shapefile_path, 10000) # Calculate the buffer of the polygon
 
     # THIS WORKS: CREATES A SHAPEFILE OF BUFFERED COUNTY
-    """BUFFER STUFF"""
+    
+    """CONSIDER REPROJECTING THE BOUNDARIES TO UTM?"""
+    """Create list of raster files, reproject them, then filter them"""
+    # reprojected_list = get_repro_raster_list(TEST_DIR)
+    # boundary = get_boundary(shp_path)
+    # buffer = (buffer_boundary(boundary, .01))
+    # filter_raster_from_list(reprojected_list, boundary, buffer)
+
+    """BUFFER TESTING"""
     # buffer = (buffer_boundary(boundary, .01))
     # print(buffer)
     # buffer_shapefile = create_shapefile(buffer, path = SHP_OUT + "buffer3.shp") # Create a shapefile from the buffer

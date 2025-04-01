@@ -1,0 +1,44 @@
+# # Bytecode files
+# __pycache__/
+# *.py[cod]
+# *$py.class
+
+# Virtual environment
+venv/
+pyGeo/
+.venv/
+
+# # Jupyter Notebook checkpoints
+# .ipynb_checkpoints/
+
+# # Log files
+# *.log
+# *.out
+
+# OS-specific files
+# .DS_Store  # macOS
+Thumbs.db  # Windows
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.swp
+
+# # Environment variables and secrets
+# .env
+# *.secret
+# config.json
+
+# # Compiled C extensions
+# *.so
+
+# # Test and coverage reports
+# htmlcov/
+# .coverage
+# *.cover
+# *.py,cover
+# .cache
+# nosetests.xml
+# coverage.xml
+# *.mo
+# *.pot
