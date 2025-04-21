@@ -15,6 +15,7 @@ from functools import partial
 from osgeo import gdal, ogr, osr
 from pathlib import Path
 from shapefile_funcs import *
+from geometry import *
 
 """
 1. Open a .tif file using gdal
@@ -26,64 +27,11 @@ TEST_DIR = Path("LiDAR/Storey")
 OUT_DIR = "reprojected/storey/"
 shp_path = "ShapeFiles/tl_2024_us_county.shp"
 SHP_OUT = "ShapeFiles/out/"
+
+# difference = 0
 # "C:\Users\andre\OneDrive_CalPoly\Documents\SeniorProject\Code\LiDAR\USGS_1M_11_x54y441_NV_EastCentral_2021_D21.tif"
 # This is kinda helpful to see how to open stuff with gdal and
 # reproject the data
-
-def run_command(command_string):
-    print("> " + command_string)
-    retval = subprocess.call(command_string, shell=True)
-    return
-
-
-    
-# def get_extent(ds):
-#     """ Return list of corner coordinates from a gdal Dataset """
-#     xmin, xpixel, _, ymax, _, ypixel = ds.GetGeoTransform()
-#     width, height = ds.RasterXSize, ds.RasterYSize
-#     xmax = xmin + width * xpixel
-#     ymin = ymax + height * ypixel
-
-#     return xmin, xmax, ymin, ymax
-
-# def create_vrts(tile_dir, input_files, skip_boundary):
-#     """
-#     Creates virtual rasters (VRTs) for the input files on disk.
-#     Returns:
-#     1) The filename for a VRT of all of the input files in EPSG:4326
-#     2) The bounding polygon for all of the input files in EPSG:4326
-#     """
-#     print("Creating VRTs and computing boundary")
-
-#     # Some input datasets have more than one projection.
-#     #
-#     # All files in a VRT must have the same projection.  Thus, we must first
-#     # create an intermediate VRT that warps the inputs.
-#     #
-#     # However, computing the boundary can be much faster on the raw
-#     # data, because we can use overview (pyramid) images at lower
-#     # resolution, and these would not be present in the warped
-#     # version.  So, for each projection, we create a VRT of all the
-#     # inputs with that projection, compute the boundary of each one,
-#     # and then we take the union of all of these boundaries to get the
-#     # boundary of all of the inputs.
-    
-#     # Map of projection name to list of files with that projection
-#     projection_map = {}  
-#     for input_file in input_files:
-#         ds = gdal.Open(input_file)
-#         prj = ds.GetProjection()
-#         srs = osr.SpatialReference(wkt=prj)
-#         # gdalbuildvrt needs the projections to match pretty much exactly within a VRT file.
-#         # It's not enough to use the projection name; sometimes two projections have the
-#         # same name but slightly different datums, and gdalbuildvrt will fail.
-#         # So instead we use the whole WKT string.
-#         projection_name = srs.ExportToWkt()
-#         projection_map.setdefault(projection_name, []).append(input_file)
-
-#     return projection_map
-
-# Maybe I can put all of the file names in a list and then do this with threads
 
 def process_dir(dir):
     """Given a directory containing LiDAR files. For all files:
@@ -116,18 +64,79 @@ def process_dir(dir):
     
     return county_max, county_x, county_y
 
+
 def get_repro_raster_list(dir):
     """Given a directory containing LiDAR files. 
     For all files:
       reproject all files to lat/lon"""
+    # CREATE A DIRECTORY IF ONE DOESN'T EXIST
+    # os.makedirs(dir, exist_ok=True)
+    # if not os.listdir(dir):
+    # print(difference)
     
     raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
+    #print(raster_list)
+    # reproject_with_diff = partial(reproject_raster, difference)  # Use partial to pass the difference polygon
     with Pool() as pool:
         reprojected_list = pool.map(reproject_raster, raster_list)
-    # print(reprojected_list)
+        # reprojected_list = pool.map(reproject_with_diff, raster_list)
+    print("Rasters reprojected!")
     return reprojected_list
+    # else:
+    #     return os.listdir(dir)
+    # print(reprojected_list)
 
-def process_dir_parallel(dir):
+
+def get_clip_raster_list(reprojected_list):
+    with Pool() as pool:
+        clipped_list = pool.map(clip_raster, reprojected_list)
+        # reprojected_list = pool.map(reproject_with_diff, raster_list)
+    return clipped_list
+
+# def reproject_raster(output_file, ds):
+def reproject_raster(raster):
+    """Reproject a raster dataset to lat/lon (EPSG:4326)"""
+    from osgeo import gdal  
+    gdal.UseExceptions()
+    # print(difference)
+    
+    # Rename the output file to xyz_reprojected.tif
+    ds = gdal.Open(raster)
+    repro_name = str(raster)[:-4].split("\\")[-1]        
+    repro_outfile = os.path.join(OUT_DIR, f"{repro_name}_reprojected.tif")
+
+    # Reproject the raster to lat/lon
+    ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:4326")
+    # Reproject the raster to web mercator 
+    # ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:3857", resampleAlg="bilinear",format='GTiff' ,outputType=gdal.GDT_Float32, multithread=True)
+
+    # Rename the reprojected raster to xyz_clipped
+    # ds_clip = gdal.Open(repro_outfile)
+    # clip_name = str(repro_outfile)[:-4].split("\\")[-1]        
+    # clip_outfile = f"{clip_name}_clipped.tif"
+    # # Clip the reprojected raster using the difference polygon
+    # difference = os.path.join(SHP_OUT, "difference.shp")
+    # gdal.Warp(clip_outfile, repro_outfile, cutlineDSName=difference, cropToCutline=True)
+    ds = None
+    ds_reprojected = None
+    return repro_outfile
+    # return clip_outfile
+ 
+ 
+def clip_raster(raster):
+    """Given a list of raster files, clip them using the difference polygon"""
+    # difference = os.path.join(SHP_OUT, "difference.shp")
+    #     gdal.Warp(raster, raster, cutlineDSName=difference, cropToCutline=True)
+    # return raster_list
+    clip_name = str(raster)[:-4].split("\\")[-1]        
+    clip_outfile = f"{clip_name}_clipped.tif"
+    # Clip the reprojected raster using the difference polygon
+    difference = os.path.join(SHP_OUT, "difference.shp")
+    gdal.Warp(clip_outfile, raster, cutlineDSName=difference, cropToCutline=True)
+    return clip_outfile
+
+
+def process_dir_parallel(dir, boundary = None, buffer = None):
     """
     Given a directory containing LiDAR files. 
     For all files:
@@ -140,8 +149,9 @@ def process_dir_parallel(dir):
     suffix = "_reprojected"
     file_type = ".tif"
 
-    boundary = get_boundary(shp_path)
-    buffer = buffer_boundary(boundary, 0.01)
+    if boundary is None and buffer is None:
+        boundary = get_boundary(shp_path)
+        buffer = buffer_boundary(boundary, 0.01)
 
     county_max = county_x = county_y = 0.0
     
@@ -154,17 +164,52 @@ def process_dir_parallel(dir):
         # process_func = partial(process_file, boundary=boundary, buffer=buffer)
         # results = pool.map(process_func, file_list)
         results = pool.map(process_file, filtered_rasters)  # Results is a list of tuples containing the max value and coordinates
+    
+    # for local_max, local_x, local_y in results:
+    #     # if check_point(boundary, local_x, local_y):     # Check if point is in the boundary
+    #     if check_point_buffer(boundary, local_x, local_y, 0.01, buffer):     # Check if point is in the buffer
+    #         if local_max > county_max:      # Update the county max
+    #             county_max = local_max
+    #             county_x = local_x
+    #             county_y = local_y
+    
+    return results
 
-    for local_max, local_x, local_y in results:
-        # if check_point(boundary, local_x, local_y):     # Check if point is in the boundary
-        if check_point_buffer(boundary, local_x, local_y, 0.01):     # Check if point is in the buffer
-            if local_max > county_max:      # Update the county max
-                county_max = local_max
-                county_x = local_x
-                county_y = local_y
+def find_highest_point(reproj_raster_list, boundary, buffer, search_flag, altitude_range=None):
+    """Given a list of reproj_raster_list, find the max value and cooresponding coordinates"""
+    county_max = county_x = county_y = 0.0
+    max_list = []
+    if altitude_range is None:
+        altitude_range = [0, float("inf")]
+
+    for local_max, local_x, local_y in reproj_raster_list:
+        # Check if the point is within the altitude range
+        if local_max < altitude_range[0] or local_max > altitude_range[1]:
+            continue  # Skip this point if it's outside the range
+        
+        if search_flag == "buffer":
+            if check_point_buffer(boundary, local_x, local_y, 0.01, buffer):     # Check if point is in the buffer
+                if local_max > county_max:      # Update the county max
+                    county_max = local_max
+                    county_x = local_x
+                    county_y = local_y
+                    entry = local_max, local_x, local_y
+                    max_list.append(entry)
+        elif search_flag == "boundary":
+            if check_point(boundary, local_x, local_y):
+                if local_max > county_max:      # Update the county max
+                    county_max = local_max
+                    county_x = local_x
+                    county_y = local_y
+                    entry = local_max, local_x, local_y
+                    max_list.append(entry)
+    sorted_max_list = sorted(max_list, key=lambda x: x[0], reverse=True)  # Sort the list by max value in descending order
+    length = len(sorted_max_list)
+    if length < 5:
+        return sorted_max_list[:length]  # Return the max value and coordinates from the sorted list
+    return sorted_max_list[:5]  # Return the max value and coordinates from the sorted list
     
-    return county_max, county_x, county_y
-    
+
 def process_file(raster):
     """Helper func for proccess parallel: Given a raster file, reproject it to lat/lon, find the max value and cooresponding coordinates."""    
     from osgeo import gdal  # Ensure it's imported inside the function for safety
@@ -176,6 +221,7 @@ def process_file(raster):
     ds = None
     return local_max, local_x, local_y
 
+
 def filter_raster(raster, boundary, buffer):
     """Given a raster in the same projection as the boundary(buffer), check if any of the corners of the raster are within the boundary"""
     # xmin, xmax, ymin, ymax = get_corners(raster)
@@ -185,26 +231,48 @@ def filter_raster(raster, boundary, buffer):
         return True
     return False
 
+
 def filter_raster_from_list(reprojected_list, boundary, buffer):
     """Given a raster in the same projection as the boundary(buffer), check if any of the corners of the raster are within the boundary"""
-    print("Original number of rasters: ", len(reprojected_list))
-    # xmin, xmax, ymin, ymax = get_corners(raster)
     
+    # print("Original number of rasters: ", len(reprojected_list))
+
+    difference = take_difference(boundary, buffer)
     filtered_rasters = []
+    # difference = os.path.join(SHP_OUT, "difference.shp")
+
     for raster in reprojected_list:
         # Get corners of the raster
         ds = gdal.Open(raster)
-        xmin, xmax, ymin, ymax = get_corners(ds)
-        # Check if corners are in buffer but not in boundary
-        if check_point_buffer(boundary, xmin, ymin, 0.01, buffer) or check_point_buffer(boundary, xmin, ymax, 0.01, buffer) or check_point_buffer(boundary, xmax, ymin, 0.01, buffer) or check_point_buffer(boundary, xmax, ymax, 0.01, buffer):
-        # if check_point(boundary, xmin, ymin) or check_point(boundary, xmin, ymax) or check_point(boundary, xmax, ymin) or check_point(boundary, xmax, ymax):
-            filtered_rasters.append(raster)
-    print("Number of rasters within boundary: ", len(filtered_rasters))
-    print(filtered_rasters)
+        geo_transform = ds.GetGeoTransform()
+        # Create a bounding box from the corners of the raster file
+        bounding_box = ogr.Geometry(ogr.wkbPolygon)
+        # Get the corners of the raster
+        minX, maxX, minY, maxY = get_corners(ds)
+        # Create a linear ring to define the bounding box
+        ring = ogr.Geometry(ogr.wkbLinearRing)
+        # Add points to the ring to create a rectangle
+        ring.AddPoint(minX, minY)
+        ring.AddPoint(minX, maxY)
+        ring.AddPoint(maxX, maxY)
+        ring.AddPoint(maxX, minY)
+        ring.AddPoint(minX, minY)  # Close ring
+        bounding_box.AddGeometry(ring)
+
+        
+        # layer = difference.GetLayer()
+        # polygon = layer.GetNextFeature().GetGeometryRef()
+        
+        if difference.Intersects(bounding_box):
+            filtered_rasters.append(raster)  # Intersection exists
+    ds = None
+    # print("Number of rasters within boundary: ", len(filtered_rasters))
+    # print(filtered_rasters)
     return filtered_rasters
 
     # print("Number of rasters within boundary: ", len(filtered_rasters))
     # return filtered_rasters
+
 
 def check_point(boundary, x, y):
     """Given a boundary and x,y coordinates create a point and determine if it's in the boundary"""
@@ -219,6 +287,7 @@ def check_point(boundary, x, y):
         return False
         # print("The point is outside the polygon.")
     
+
 def check_point_buffer(boundary, x, y, buffer_distance, buffer=None):
     """Given a boundary and x,y coordinates create a point and determine 
     if it's in the buffer BUT NOT IN THE boundary"""
@@ -235,132 +304,6 @@ def check_point_buffer(boundary, x, y, buffer_distance, buffer=None):
     else:
         return False
         # print("The point is outside the polygon.")
-
-
-def buffer_boundary(path, buffer_distance):
-    # CONTAINS COUNTY FILTERING
-    # PATH IS OF A SPECIFIC COUNTY
-    """Converts polygon from lat/lon to cartesian coordinates in order to make distance in meters.
-    Then Creates a buffer in meters around a boundary"""
-
-    # driver = ogr.GetDriverByName("ESRI Shapefile")
-    # data_source = driver.Open(path, 0)  # 0 means read-only mode
-    # layer = data_source.GetLayer()
-    # # layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
-    # feature = layer.GetNextFeature()
-    # boundary = feature.GetGeometryRef()
-
-    # source_srs = osr.SpatialReference()
-    # # target_srs = osr.SpatialReference()
-    # # target_srs.ImportFromEPSG(32611)  # UTM Zone 11N
-
-    # centroid = boundary.Centroid()
-    # lon, lat, _ = centroid.GetPoint()
-
-    # # Determine the UTM zone based on the longitude
-    # utm_zone = int((lon + 180) / 6) + 1
-    # is_northern = lat >= 0
-
-    # target_srs = osr.SpatialReference()
-    # target_srs.SetUTM(utm_zone, is_northern)
-
-    # # Create coordinate transformation
-    # transform = osr.CoordinateTransformation(source_srs, target_srs)
-
-    # # Directly transform the polygon (no manual iteration needed!)
-    # boundary.Transform(transform)
-    # buffer = boundary.Buffer(buffer_distance)
-    buffer = path.Buffer(buffer_distance)
-    return buffer.Clone()
-
-
-def scale_boundary(dx, dy, county=None):
-    """Creates a secondary boundary given a specific distance value (d) to exapnd by
-            Find centroid of the county
-            Scale each point in the boundary by a scaler vector"""
-    if county is None:
-        county = get_boundary(shp_path)
-
-    # Get the boundary of the county
-    boundary = county.GetGeometryRef(0)
-    # Get the centroid of the county
-    # centroid = boundary.Centroid()
-    coords = np.array([boundary.GetPoint(i)[:2] for i in range(boundary.GetPointCount())])
-   
-    # Compute Centroid
-    centroid = coords.mean(axis=0)  # Mean of x and y coordinates
-    coords -= centroid # Translate to Origin
-
-    # Apply Scaling
-    scaling_matrix = np.array([[dx, 0], [0, dy]])  # 2x2 scaling matrix
-    coords = coords @ scaling_matrix.T  # Apply transformation
-    coords += centroid # Translate Back to Original Position
-
-    # Convert back to OGR Polygon
-    new_ring = ogr.Geometry(ogr.wkbLinearRing)
-    for x, y in coords:
-        new_ring.AddPoint(x, y)
-    
-    new_polygon = ogr.Geometry(ogr.wkbPolygon)
-    new_polygon.AddGeometry(new_ring)
-
-    return new_polygon.Clone()
-
-
-# def reproject_raster(output_file, ds):
-def reproject_raster(raster):
-    """Reproject a raster dataset to lat/lon (EPSG:4326)"""
-    from osgeo import gdal  
-    gdal.UseExceptions()
-
-    # Rename the output file to xyz_reprojected.tif
-    ds = gdal.Open(raster)
-    name = str(raster)[:-4].split("\\")[-1]        
-    outfile = os.path.join(OUT_DIR, f"{name}_reprojected.tif")
-
-    # Below this comment works 
-
-    # Reproject the raster to lat/lon
-    ds_reprojected = gdal.Warp(outfile, ds, dstSRS="EPSG:4326")
-    ds = None
-    ds_reprojected = None
-    return outfile
-
-
-def get_boundary(path):
-    """Opens a shapefile, filters it to a specific county, and then returns the polygon
-    """
-    
-    driver = ogr.GetDriverByName("ESRI Shapefile")
-    data_source = driver.Open(path, 0)  # 0 means read-only mode
-
-    if data_source is None:
-        print("Failed to open file")
-    else:
-        print("Shapefile opened successfully!")
-    
-    layer = data_source.GetLayer()
-    # print(layer.GetSpatialRef().ExportToWkt())
-    # Print geometries and attributes of each feature
-    layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
-    
-    # print(layer.GetFeatureCount())
-    # print(layer.GetSpatialRef().ExportToWkt())
-    # print(layer.GetExtent())
-    for feature in layer:
-        polygon = feature.GetGeometryRef()
-        data_source = None
-        return polygon.Clone()
-
-
-def get_corners(ds):
-    """ Return list of corner coordinates from a gdal Dataset """
-    xmin, xpixel, _, ymax, _, ypixel = ds.GetGeoTransform()
-    width, height = ds.RasterXSize, ds.RasterYSize
-    xmax = xmin + width * xpixel
-    ymin = ymax + height * ypixel
-
-    return xmin, xmax, ymin, ymax
 
 
 def get_metadata(dataset):
@@ -395,3 +338,5 @@ def max_point(dataset):# Put the elevations into a numpy array
     # print(f"Max Value Coordinates: ({max_x}, {max_y})")
 
     return max_value, max_x, max_y
+
+

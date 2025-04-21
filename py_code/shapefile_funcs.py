@@ -13,11 +13,13 @@ OUT_DIR = "reprojected/storey/"
 shp_path = "ShapeFiles/tl_2024_us_county.shp"
 SHP_OUT = "ShapeFiles/out/"
 
-def create_shapefile(boundary, path):
+def create_shapefile(object, path, type = None):
     """Create a shapefile from a boundary"""
 
     # path = SHP_OUT + "boundary_buff.shp"
+    # Set up shapefile driver
     driver = ogr.GetDriverByName("ESRI Shapefile")
+    # Create data source (shapefile)
     data_source = driver.CreateDataSource(path)
 
     if data_source is None:
@@ -25,11 +27,18 @@ def create_shapefile(boundary, path):
     else:
         print("Shapefile created successfully!")
 
+    # Create spatial reference, WGS84
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(4326)
     
-    layer = data_source.CreateLayer("boundary", srs, ogr.wkbPolygon)
-
+    if type == "polygon" or type == None:
+        layer = data_source.CreateLayer("boundary", srs, ogr.wkbPolygon)
+    if type == "point":
+        layer = data_source.CreateLayer("point", srs, ogr.wkbPoint)
+    if type == "line":
+        layer = data_source.CreateLayer("line", srs, ogr.wkbLineString)
+    if type == "points":
+        layer = data_source.CreateLayer("points", srs, ogr.wkbMultiPoint)
     # Add an ID field
     id_field = ogr.FieldDefn("id", ogr.OFTInteger)
     layer.CreateField(id_field)
@@ -37,7 +46,7 @@ def create_shapefile(boundary, path):
     # Create a new feature
     feature = ogr.Feature(layer.GetLayerDefn())
     feature.SetField("id", 1)
-    feature.SetGeometry(boundary)
+    feature.SetGeometry(object)
 
     layer.CreateFeature(feature)
 
@@ -45,7 +54,7 @@ def create_shapefile(boundary, path):
     data_source = None
     return path
 
-def reproject_shapefile(target, shapefile, flag, out_path=SHP_OUT + "boundary_reprojected2.shp"):
+def reproject_shapefile(target, shapefile, flag, out_path=SHP_OUT + "boundary_webMercator.shp"):
     # CONTAINS COUNTY FILTERING
     """"Changes the shapefile projection to match the tif file and then creates a new shapefile"""
     driver = ogr.GetDriverByName("ESRI Shapefile")
@@ -66,6 +75,7 @@ def reproject_shapefile(target, shapefile, flag, out_path=SHP_OUT + "boundary_re
         targetprj = target
 
     transform = osr.CoordinateTransformation(sourceprj, targetprj)
+    # transform = osr.CoordinateTransformation(sourceprj, 'EPSG:3857')
 
     to_fill = ogr.GetDriverByName("Esri Shapefile")
     # out_path = SHP_OUT + "boundary_reprojected.shp"
@@ -90,6 +100,7 @@ def reproject_shapefile(target, shapefile, flag, out_path=SHP_OUT + "boundary_re
         feat = None
 
     ds = None
+    print("Shapefile reprojected successfully!")
     return out_path
 
 def get_shapefile_layer(shapefile_path):
@@ -103,8 +114,12 @@ def get_shapefile_layer(shapefile_path):
         return
 
     layer = data_source.GetLayer()
-    layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
-    return layer.GetSpatialRef()
+    # layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
+    for feature in layer:
+        polygon = feature.GetGeometryRef()
+        data_source = None
+        return polygon.Clone()
+    # return layer.GetSpatialRef()
 
 def get_shapefile_metadata(shapefile_path):
     """Prints metadata of a shapefile"""
@@ -140,3 +155,92 @@ def get_shapefile_metadata(shapefile_path):
         # print("  Geometry:", geometry.ExportToWkt())
 
     data_source = None
+
+def shp_to_geojson(shapefile_path, out_path):
+    """Convert a shapefile to GeoJSON"""
+    driver = ogr.GetDriverByName("GeoJSON")
+    data_source = driver.CreateDataSource(out_path)
+
+    if data_source is None:
+        print("Failed to create GeoJSON file")
+        return
+
+    shp_driver = ogr.GetDriverByName("ESRI Shapefile")
+    shp_data_source = shp_driver.Open(shapefile_path, 0)  # 0 means read-only mode
+
+    if shp_data_source is None:
+        print("Failed to open shapefile")
+        return
+
+    layer = shp_data_source.GetLayer()
+    out_layer = data_source.CopyLayer(layer, "layer_name")
+
+    if out_layer is None:
+        print("Failed to copy layer")
+        return
+
+    data_source = None
+    shp_data_source = None
+    print("Shapefile converted to GeoJSON successfully!")
+
+def geojson_to_shp(geojson_path, out_path):
+    """Convert a GeoJSON file to a shapefile"""
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+    data_source = driver.CreateDataSource(out_path)
+
+    if data_source is None:
+        print("Failed to create shapefile")
+        return
+
+    geojson_driver = ogr.GetDriverByName("GeoJSON")
+    geojson_data_source = geojson_driver.Open(geojson_path, 0)  # 0 means read-only mode
+
+    if geojson_data_source is None:
+        print("Failed to open GeoJSON file")
+        return
+
+    layer = geojson_data_source.GetLayer()
+    out_layer = data_source.CopyLayer(layer, "layer_name")
+
+    if out_layer is None:
+        print("Failed to copy layer")
+        return
+
+    data_source = None
+    geojson_data_source = None
+    print("GeoJSON converted to shapefile successfully!")
+
+def create_gpkg(object, path):
+    # Create the geometry: a linear ring + polygon
+    
+    object = object.GetGeometryRef(0) # Get the first geometry from the shapefile
+    # Set up GPKG driver
+    driver = ogr.GetDriverByName("GPKG")
+    gpkg = driver.CreateDataSource(path)
+
+    # Spatial reference (WGS84)
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+
+    # Create layer with point geometry
+    layer = gpkg.CreateLayer('Boundary points', srs, ogr.wkbPoint)
+
+    # Add an ID field
+    field_id = ogr.FieldDefn("ID", ogr.OFTInteger)
+    layer.CreateField(field_id)
+
+    # Add points to the layer
+    points = np.array([object.GetPoint(i)[:2] for i in range(object.GetPointCount())])
+    print(points)
+    for i, (x, y) in enumerate(points):
+        point = ogr.Geometry(ogr.wkbPoint)
+        point.AddPoint(x, y)
+
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetGeometry(point)
+        feature.SetField("ID", i + 1)
+        layer.CreateFeature(feature)
+        feature = None  # clean up
+
+    gpkg = None  # save and close
+    print(f"Saved {len(points)} points to {path}")
