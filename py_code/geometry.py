@@ -1,16 +1,12 @@
+# geometry.py
 # I DELETED THIS FROM PATH \msys64\ucrt64\binpi
-import argparse
-import glob
 import math
 import os
 from pyproj import Geod
 os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
 # os.environ['GDAL_DATA'] = 'C:\\Users\\Sai kiran\\anaconda3\\envs\sai\\Library\\share'
 
-import signal
-import subprocess
 import numpy as np
-
 from multiprocessing import Pool
 from functools import partial
 from osgeo import gdal, ogr, osr
@@ -24,7 +20,7 @@ from shapefile_funcs import *
 """
 SINGLE_FILE = "LiDAR/Storey/USGS_1M_11_x27y435_NV_WestCentral_EarthMRI_2020_D20.tif"
 TEST_DIR = Path("LiDAR/Storey")
-OUT_DIR = "reprojected/storey/"
+out_dir = "reprojected/storey/"
 shp_path = "ShapeFiles/tl_2024_us_county.shp"
 SHP_OUT = "ShapeFiles/out/"
 
@@ -100,7 +96,7 @@ def scale_boundary(dx, dy, county=None):
     return new_polygon.Clone()
 
 
-def get_boundary(path):
+def get_boundary(path, county_filter=None):
     # CONTAINS COUNTY FILTERING
     """Opens a shapefile, filters it to a specific county, and then returns the polygon
     """
@@ -116,8 +112,12 @@ def get_boundary(path):
     layer = data_source.GetLayer()
     # print(layer.GetSpatialRef().ExportToWkt())
     # Print geometries and attributes of each feature
-    layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
+    if county_filter is None:
+        layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
+    else:
+        layer.SetAttributeFilter(county_filter)
     
+
     # print(layer.GetFeatureCount())
     # print(layer.GetSpatialRef().ExportToWkt())
     # print(layer.GetExtent())
@@ -127,39 +127,13 @@ def get_boundary(path):
         return polygon.Clone()
 
 
+
 def buffer_boundary(path, buffer_distance):
     # CONTAINS COUNTY FILTERING
     # PATH IS OF A SPECIFIC COUNTY
     """Converts polygon from lat/lon to cartesian coordinates in order to make distance in meters.
     Then Creates a buffer in meters around a boundary"""
 
-    # driver = ogr.GetDriverByName("ESRI Shapefile")
-    # data_source = driver.Open(path, 0)  # 0 means read-only mode
-    # layer = data_source.GetLayer()
-    # # layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
-    # feature = layer.GetNextFeature()
-    # boundary = feature.GetGeometryRef()
-
-    # source_srs = osr.SpatialReference()
-    # # target_srs = osr.SpatialReference()
-    # # target_srs.ImportFromEPSG(32611)  # UTM Zone 11N
-
-    # centroid = boundary.Centroid()
-    # lon, lat, _ = centroid.GetPoint()
-
-    # # Determine the UTM zone based on the longitude
-    # utm_zone = int((lon + 180) / 6) + 1
-    # is_northern = lat >= 0
-
-    # target_srs = osr.SpatialReference()
-    # target_srs.SetUTM(utm_zone, is_northern)
-
-    # # Create coordinate transformation
-    # transform = osr.CoordinateTransformation(source_srs, target_srs)
-
-    # # Directly transform the polygon (no manual iteration needed!)
-    # boundary.Transform(transform)
-    # buffer = boundary.Buffer(buffer_distance)
     buffer = path.Buffer(buffer_distance)
     print("Buffer created!")
     return buffer.Clone()
@@ -168,6 +142,7 @@ def buffer_boundary(path, buffer_distance):
 def take_difference(boundary, buffer):
     difference = buffer.Difference(boundary)
     return difference.Clone()
+
 
 def distance_point_point(point1, point2):
     """Calculates the distance between two points"""

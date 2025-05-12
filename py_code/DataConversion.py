@@ -1,21 +1,16 @@
+# DataConversion.py
 # I DELETED THIS FROM PATH \msys64\ucrt64\binpi
-import argparse
-import glob
-import math
+
 import os
-os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
-# os.environ['GDAL_DATA'] = 'C:\\Users\\Sai kiran\\anaconda3\\envs\sai\\Library\\share'
-
-import signal
-import subprocess
 import numpy as np
-
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 from functools import partial
 from osgeo import gdal, ogr, osr
 from pathlib import Path
 from shapefile_funcs import *
 from geometry import *
+
+os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
 
 """
 1. Open a .tif file using gdal
@@ -23,8 +18,7 @@ from geometry import *
 3. Convert the file from utm to lat long, play around with this after the conversion
 """
 SINGLE_FILE = "LiDAR/Storey/USGS_1M_11_x27y435_NV_WestCentral_EarthMRI_2020_D20.tif"
-TEST_DIR = Path("LiDAR/Storey")
-OUT_DIR = "reprojected/storey/"
+# TEST_DIR = Path("LiDAR/Storey")
 shp_path = "ShapeFiles/tl_2024_us_county.shp"
 SHP_OUT = "ShapeFiles/out/"
 
@@ -38,6 +32,7 @@ def process_dir(dir):
     reproject all files to lat/lon, find the max value and cooresponding coordinates.
     then compare results to find and return true max.
     """
+    
     suffix = "_reprojected"
     file_type = ".tif"
     boundary = get_boundary(shp_path)
@@ -64,79 +59,74 @@ def process_dir(dir):
     
     return county_max, county_x, county_y
 
-
-def get_repro_raster_list(dir):
-    """Given a directory containing LiDAR files. 
-    For all files:
-      reproject all files to lat/lon"""
-    # CREATE A DIRECTORY IF ONE DOESN'T EXIST
-    # os.makedirs(dir, exist_ok=True)
-    # if not os.listdir(dir):
-    # print(difference)
-    
+def get_repro_raster_list(dir, out_dir):
     raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
-    #print(raster_list)
-    # reproject_with_diff = partial(reproject_raster, difference)  # Use partial to pass the difference polygon
+    args = [(raster, out_dir) for raster in raster_list]
+   
     with Pool() as pool:
-        reprojected_list = pool.map(reproject_raster, raster_list)
-        # reprojected_list = pool.map(reproject_with_diff, raster_list)
+        reprojected_list = pool.starmap(reproject_raster, args)
+
     print("Rasters reprojected!")
     return reprojected_list
-    # else:
-    #     return os.listdir(dir)
-    # print(reprojected_list)
 
-
-def get_clip_raster_list(reprojected_list):
-    with Pool() as pool:
-        clipped_list = pool.map(clip_raster, reprojected_list)
-        # reprojected_list = pool.map(reproject_with_diff, raster_list)
-    return clipped_list
-
-# def reproject_raster(output_file, ds):
-def reproject_raster(raster):
-    """Reproject a raster dataset to lat/lon (EPSG:4326)"""
-    from osgeo import gdal  
+def reproject_raster(raster, out_dir):
+    from osgeo import gdal
     gdal.UseExceptions()
-    # print(difference)
-    
-    # Rename the output file to xyz_reprojected.tif
+
     ds = gdal.Open(raster)
-    repro_name = str(raster)[:-4].split("\\")[-1]        
-    repro_outfile = os.path.join(OUT_DIR, f"{repro_name}_reprojected.tif")
+    repro_name = str(raster)[:-4].split("\\")[-1]
+    repro_outfile = os.path.join(out_dir, f"{repro_name}_reprojected.tif")
 
-    # Reproject the raster to lat/lon
     ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:4326")
-    # Reproject the raster to web mercator 
-    # ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:3857", resampleAlg="bilinear",format='GTiff' ,outputType=gdal.GDT_Float32, multithread=True)
 
-    # Rename the reprojected raster to xyz_clipped
-    # ds_clip = gdal.Open(repro_outfile)
-    # clip_name = str(repro_outfile)[:-4].split("\\")[-1]        
-    # clip_outfile = f"{clip_name}_clipped.tif"
-    # # Clip the reprojected raster using the difference polygon
-    # difference = os.path.join(SHP_OUT, "difference.shp")
-    # gdal.Warp(clip_outfile, repro_outfile, cutlineDSName=difference, cropToCutline=True)
     ds = None
     ds_reprojected = None
     return repro_outfile
-    # return clip_outfile
- 
- 
-def clip_raster(raster):
-    """Given a list of raster files, clip them using the difference polygon"""
-    # difference = os.path.join(SHP_OUT, "difference.shp")
-    #     gdal.Warp(raster, raster, cutlineDSName=difference, cropToCutline=True)
-    # return raster_list
-    clip_name = str(raster)[:-4].split("\\")[-1]        
-    clip_outfile = f"{clip_name}_clipped.tif"
-    # Clip the reprojected raster using the difference polygon
-    difference = os.path.join(SHP_OUT, "difference.shp")
-    gdal.Warp(clip_outfile, raster, cutlineDSName=difference, cropToCutline=True)
-    return clip_outfile
 
 
-def process_dir_parallel(dir, boundary = None, buffer = None):
+# def get_repro_raster_list(dir):
+#     """Given a directory containing LiDAR files. 
+#     For all files:
+#       reproject all files to lat/lon"""
+#     # CREATE A DIRECTORY IF ONE DOESN'T EXIST
+#     # os.makedirs(dir, exist_ok=True)
+#     # if not os.listdir(dir):
+#     # print(difference)
+    
+#     raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
+#     # reproject_with_diff = partial(reproject_raster, difference)  # Use partial to pass the difference polygon
+#     with Manager() as manager:
+
+#         with Pool() as pool:
+#             reprojected_list = pool.map(reproject_raster, raster_list)
+#             # reprojected_list = pool.map(reproject_with_diff, raster_list)
+#     print("Rasters reprojected!")
+#     return reprojected_list
+
+
+# def reproject_raster(raster):
+#     """Reproject a raster dataset to lat/lon (EPSG:4326)"""
+#     from osgeo import gdal  
+#     gdal.UseExceptions()
+    
+#     # Rename the output file to xyz_reprojected.tif
+#     ds = gdal.Open(raster)
+#     repro_name = str(raster)[:-4].split("\\")[-1]        
+    
+#     repro_outfile = os.path.join(out_dir, f"{repro_name}_reprojected.tif")
+
+#     # Reproject the raster to lat/lon
+#     ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:4326")
+#     # Reproject the raster to web mercator 
+#     # ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:3857", resampleAlg="bilinear",format='GTiff' ,outputType=gdal.GDT_Float32, multithread=True)
+
+#     ds = None
+#     ds_reprojected = None
+#     return repro_outfile
+ 
+ 
+
+def process_dir_parallel(dir, out_dir, boundary = None, buffer = None):
     """
     Given a directory containing LiDAR files. 
     For all files:
@@ -157,14 +147,14 @@ def process_dir_parallel(dir, boundary = None, buffer = None):
     
     # Get list of raster files (.tif files)
     # file_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
-    reprojected_list = get_repro_raster_list(dir) # Get list of reprojected rasters
-    filtered_rasters = filter_raster_from_list(reprojected_list, boundary, buffer) # Filter rasters that are within the boundary
+    reprojected_list = get_repro_raster_list(dir, out_dir) # Get list of reprojected rasters
+    # filtered_rasters = filter_raster_from_list(reprojected_list, boundary, buffer) # Filter rasters that are within the boundary
 
     with Pool() as pool:
         # process_func = partial(process_file, boundary=boundary, buffer=buffer)
         # results = pool.map(process_func, file_list)
-        results = pool.map(process_file, filtered_rasters)  # Results is a list of tuples containing the max value and coordinates
-    
+        # results = pool.map(process_file, filtered_rasters)  # Results is a list of tuples containing the max value and coordinates
+        results = pool.map(process_file, reprojected_list)  # Results is a list of tuples containing the max value and coordinates
     # for local_max, local_x, local_y in results:
     #     # if check_point(boundary, local_x, local_y):     # Check if point is in the boundary
     #     if check_point_buffer(boundary, local_x, local_y, 0.01, buffer):     # Check if point is in the buffer
@@ -175,7 +165,8 @@ def process_dir_parallel(dir, boundary = None, buffer = None):
     
     return results
 
-def find_highest_point(reproj_raster_list, boundary, buffer, search_flag, altitude_range=None):
+
+def find_highest_point(reproj_raster_list, boundary, buffer, search_flag, num_points, altitude_range=None):
     """Given a list of reproj_raster_list, find the max value and cooresponding coordinates"""
     county_max = county_x = county_y = 0.0
     max_list = []
@@ -205,9 +196,9 @@ def find_highest_point(reproj_raster_list, boundary, buffer, search_flag, altitu
                     max_list.append(entry)
     sorted_max_list = sorted(max_list, key=lambda x: x[0], reverse=True)  # Sort the list by max value in descending order
     length = len(sorted_max_list)
-    if length < 5:
+    if length < num_points:
         return sorted_max_list[:length]  # Return the max value and coordinates from the sorted list
-    return sorted_max_list[:5]  # Return the max value and coordinates from the sorted list
+    return sorted_max_list[:num_points]  # Return the max value and coordinates from the sorted list
     
 
 def process_file(raster):
