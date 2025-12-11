@@ -1,5 +1,4 @@
 # DataConversion.py
-# I DELETED THIS FROM PATH \msys64\ucrt64\binpi
 
 import os
 import numpy as np
@@ -10,22 +9,15 @@ from pathlib import Path
 from shapefile_funcs import *
 from geometry import *
 
-os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
+# Set the PROJ_LIB environment variable to the path of the proj data directory 
+os.environ['PROJ_LIB'] = 'C:\\Users\\andre\\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
 
 """
 1. Open a .tif file using gdal
 2. Look at the metadata to determine what the data is
 3. Convert the file from utm to lat long, play around with this after the conversion
 """
-SINGLE_FILE = "LiDAR/Storey/USGS_1M_11_x27y435_NV_WestCentral_EarthMRI_2020_D20.tif"
-# TEST_DIR = Path("LiDAR/Storey")
-shp_path = "ShapeFiles/tl_2024_us_county.shp"
-SHP_OUT = "ShapeFiles/out/"
 
-# difference = 0
-# "C:\Users\andre\OneDrive_CalPoly\Documents\SeniorProject\Code\LiDAR\USGS_1M_11_x54y441_NV_EastCentral_2021_D21.tif"
-# This is kinda helpful to see how to open stuff with gdal and
-# reproject the data
 
 def process_dir(dir):
     """Given a directory containing LiDAR files. For all files:
@@ -59,6 +51,7 @@ def process_dir(dir):
     
     return county_max, county_x, county_y
 
+
 def get_repro_raster_list(dir, out_dir):
     raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
     args = [(raster, out_dir) for raster in raster_list]
@@ -68,6 +61,7 @@ def get_repro_raster_list(dir, out_dir):
 
     print("Rasters reprojected!")
     return reprojected_list
+
 
 def reproject_raster(raster, out_dir):
     from osgeo import gdal
@@ -84,49 +78,7 @@ def reproject_raster(raster, out_dir):
     return repro_outfile
 
 
-# def get_repro_raster_list(dir):
-#     """Given a directory containing LiDAR files. 
-#     For all files:
-#       reproject all files to lat/lon"""
-#     # CREATE A DIRECTORY IF ONE DOESN'T EXIST
-#     # os.makedirs(dir, exist_ok=True)
-#     # if not os.listdir(dir):
-#     # print(difference)
-    
-#     raster_list = [raster for raster in dir.iterdir() if not os.path.isdir(raster)]
-#     # reproject_with_diff = partial(reproject_raster, difference)  # Use partial to pass the difference polygon
-#     with Manager() as manager:
-
-#         with Pool() as pool:
-#             reprojected_list = pool.map(reproject_raster, raster_list)
-#             # reprojected_list = pool.map(reproject_with_diff, raster_list)
-#     print("Rasters reprojected!")
-#     return reprojected_list
-
-
-# def reproject_raster(raster):
-#     """Reproject a raster dataset to lat/lon (EPSG:4326)"""
-#     from osgeo import gdal  
-#     gdal.UseExceptions()
-    
-#     # Rename the output file to xyz_reprojected.tif
-#     ds = gdal.Open(raster)
-#     repro_name = str(raster)[:-4].split("\\")[-1]        
-    
-#     repro_outfile = os.path.join(out_dir, f"{repro_name}_reprojected.tif")
-
-#     # Reproject the raster to lat/lon
-#     ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:4326")
-#     # Reproject the raster to web mercator 
-#     # ds_reprojected = gdal.Warp(repro_outfile, ds, dstSRS="EPSG:3857", resampleAlg="bilinear",format='GTiff' ,outputType=gdal.GDT_Float32, multithread=True)
-
-#     ds = None
-#     ds_reprojected = None
-#     return repro_outfile
- 
- 
-
-def process_dir_parallel(dir, out_dir, boundary = None, buffer = None):
+def process_dir_parallel(dir, out_dir, shp_path, boundary = None, buffer = None):
     """
     Given a directory containing LiDAR files. 
     For all files:

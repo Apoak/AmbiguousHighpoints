@@ -3,8 +3,8 @@
 import math
 import os
 from pyproj import Geod
-os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
-# os.environ['GDAL_DATA'] = 'C:\\Users\\Sai kiran\\anaconda3\\envs\sai\\Library\\share'
+os.environ['PROJ_LIB'] = 'C:\\Users\\andre\\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
+
 
 import numpy as np
 from multiprocessing import Pool
@@ -18,11 +18,6 @@ from shapefile_funcs import *
 2. Look at the metadata to determine what the data is
 3. Convert the file from utm to lat long, play around with this after the conversion
 """
-SINGLE_FILE = "LiDAR/Storey/USGS_1M_11_x27y435_NV_WestCentral_EarthMRI_2020_D20.tif"
-TEST_DIR = Path("LiDAR/Storey")
-out_dir = "reprojected/storey/"
-shp_path = "ShapeFiles/tl_2024_us_county.shp"
-SHP_OUT = "ShapeFiles/out/"
 
 
 def get_corners(ds):
@@ -63,39 +58,6 @@ def create_circle(x, y, radius):
     return circle.Clone(), point.Clone()
 
 
-def scale_boundary(dx, dy, county=None):
-    """Creates a secondary boundary given a specific distance value (d) to exapnd by
-            Find centroid of the county
-            Scale each point in the boundary by a scaler vector"""
-    if county is None:
-        county = get_boundary(shp_path)
-
-    # Get the boundary of the county
-    boundary = county.GetGeometryRef(0)
-    # Get the centroid of the county
-    # centroid = boundary.Centroid()
-    coords = np.array([boundary.GetPoint(i)[:2] for i in range(boundary.GetPointCount())])
-   
-    # Compute Centroid
-    centroid = coords.mean(axis=0)  # Mean of x and y coordinates
-    coords -= centroid # Translate to Origin
-
-    # Apply Scaling
-    scaling_matrix = np.array([[dx, 0], [0, dy]])  # 2x2 scaling matrix
-    coords = coords @ scaling_matrix.T  # Apply transformation
-    coords += centroid # Translate Back to Original Position
-
-    # Convert back to OGR Polygon
-    new_ring = ogr.Geometry(ogr.wkbLinearRing)
-    for x, y in coords:
-        new_ring.AddPoint(x, y)
-    
-    new_polygon = ogr.Geometry(ogr.wkbPolygon)
-    new_polygon.AddGeometry(new_ring)
-
-    return new_polygon.Clone()
-
-
 def get_boundary(path, county_filter=None):
     # CONTAINS COUNTY FILTERING
     """Opens a shapefile, filters it to a specific county, and then returns the polygon
@@ -125,7 +87,6 @@ def get_boundary(path, county_filter=None):
         polygon = feature.GetGeometryRef()
         data_source = None
         return polygon.Clone()
-
 
 
 def buffer_boundary(path, buffer_distance):

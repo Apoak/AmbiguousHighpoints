@@ -1,0 +1,102 @@
+Highpoint Holmes: Lidar Analysis Tool
+By Andrew Okerlund
+
+1. Set Up GDAL and Virtual Environment: 
+    To install GDAL using pip use following procedure: 
+    •	Download python 3.12 
+    •	Move python 3.12 into the Window’s path variable 
+    •	Create a virtual environment in VS Code utilizing python 3.12
+    •	Install the GDAL-3.10.1 wheel for python 3.12 from GitHub [5]
+    •	Install the GDAL wheel in the python environment using the command:
+            “python -m pip install <GDAL wheel filename>”
+    *  Add GDAL to the system path variable:
+    Example for Windows:
+            C:\Users\andre\OneDrive_CalPoly\Documents\SeniorProject\Code\pyGeo\lib\site-packages\osgeo\data\proj
+            C:\Users\andre\OneDrive_CalPoly\Documents\SeniorProject\Code\pyGeo\lib\site-packages\osgeo
+    •	Check installation by doing the following:
+            Type “python”
+            Type “from osgeo import gdal”
+    *   If there are no errors from the above command then it has been successfully installed
+
+
+2. Set the PROJ_LIB environment variable to the path of the proj data directory 
+    Example for Windows:
+        os.environ['PROJ_LIB'] = 'C:\\Users\\andre\\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
+    Paste into all .py files except for download_urls.py
+
+
+3. Download LiDAR Data
+    LiDAR Data: https://apps.nationalmap.gov/lidar-explorer/#/ 
+
+    NOTE: 
+        In the "url" folder I've included files containing links to LiDAR tiles for several files (use download_urls.py for these files).
+    Use download_urls.py to download the LiDAR data for the county of interest.
+
+    NOTE:
+        May need to adjust line 14 in download_urls.py to match the path of where the interrupt.py file is.
+        It currently reads: from py_code.interrupt import handle_ctrl_c, init_pool
+
+    Example:
+        python ./py_code/download_urls.py LiDAR/Houghton/houghton_co.txt --output_directories reprojected/houghton --threads 15
+    
+
+4. Download shapefile dataset for counties
+    Shapefile dataset: https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_20m.zip
+    Unzip the file and place it in the same directory as the main.py file
+
+
+5. Set up Input:
+    NOTE:
+        I've included an example input file in the "input" directory, you may need to change them to work on your machine.
+
+    Create input text file of the following form:
+        <Path from cwd to lidar data>
+        <Path from cwd to output directory>
+        <County Name>
+        <State ID number>
+        <Altitude range (0,5000)>
+        <Number of points to search for>
+        <Radius in meters>
+        <Center point>
+        <Create shape files (True/False)> 
+        <Path to county shapefiles>
+
+    Example input file for Storey County (No radius or center point):
+        LiDAR/Storey
+        reprojected/Storey/
+        Storey County
+        32
+        0,5000
+        5
+        None
+        None
+        True
+        tl_2024_us_county.shp
+
+    Example input file for Storey County (With radius and center point):
+        LiDAR/Storey
+        reprojected/Storey/
+        Storey County
+        32
+        0,5000
+        5
+        1000
+        39.261840852281,-119.7051741128619 
+        True
+        tl_2024_us_county.shp
+
+
+6. How to run:
+    python <path to main.py> <path to input file>
+    Example:
+        python ./py_code/main.py ./py_code/input.txt
+
+    * NOTE: May take a few minutes to complete
+
+7. Helpful links:
+        GDAL wheels: https://github.com/cgohlke/geospatial-wheels/releases/tag/v2024.9.22
+        Python 3.12: https://www.python.org/downloads/release/python-3120/
+        LiDAR Data: https://apps.nationalmap.gov/lidar-explorer/#/ 
+        Video help: 
+            Install GDAL using pip:
+                https://www.youtube.com/watch?v=8iCWUp7WaTk   

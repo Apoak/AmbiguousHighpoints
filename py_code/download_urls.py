@@ -11,7 +11,7 @@ import tempfile
 from multiprocessing import Pool
 from pathlib import Path
 
-from interrupt import handle_ctrl_c, init_pool
+from py_code.interrupt import handle_ctrl_c, init_pool
 
 def run_command(command_string, verbose=False, suppress_output=False):
     if verbose:

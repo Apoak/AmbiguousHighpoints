@@ -212,13 +212,23 @@ def read_text_file(file_path):
     else:
         print("Invalid input for create shape. Defaulting to False.")
         create_shape = False
+    shp_path = Path(lines[9].strip()) if len(lines) > 9 else None
+    if not lidar_path.exists():
+        print(f"LiDAR path {lidar_path} does not exist. Please provide a valid path.")
+        exit(1)  # Exit if the LiDAR path does not exist
+    if not Path(output_path).exists():
+        print(f"Output path {output_path} does not exist. Please provide a valid path.")
+        exit(1)  # Exit if the output path does not exist
+    if not shp_path or not shp_path.exists():
+        print(f"Shapefile path {shp_path} does not exist. Please provide a valid path.")
+        exit(1)  # Exit if the shapefile path does not exist
 
-    return lidar_path, output_path, county_filter, state_filter, altitude_range, num_points, radius, point_of_interest, create_shape
+    return lidar_path, output_path, county_filter, state_filter, altitude_range, num_points, radius, point_of_interest, create_shape, shp_path
 
 
 def write_text_file(boundary_max_list, buffer_max_list, boundary_max, buffer_max, buff_bound_distance, highPoint_distance, county_name):
     """Writes the high points to a text file"""
-    with open(county_name + "high_points.txt", 'w') as file:
+    with open(county_name + "_high_points.txt", 'w') as file:
         file.write(county_name + "\n")
         file.write("High Points in boundary:\n")
         # count = 1
@@ -240,7 +250,26 @@ def write_text_file(boundary_max_list, buffer_max_list, boundary_max, buffer_max
         file.write(f"Distance from buffer high point to boundary: {buff_bound_distance}\n")
         file.write(f"Distance from buffer high point to boundary high point: {highPoint_distance}\n")
 
+def write_text_file_no_buffer(boundary_max_list, boundary_max, county_name):
+    """Writes the high points to a text file without buffer"""
+    with open(county_name + "_high_points.txt", 'w') as file:
+        file.write(county_name + "\n")
+        file.write("High Points in boundary:\n")
+        for count, point in enumerate(boundary_max_list):
+            file.write(f"{count + 1}. Elevation: {point[0]} Lat: {point[1]} Lon: {point[2]}\n")
+        file.write("\n")
+        file.write(f"Boundary Max: {boundary_max[0]}, Boundary X: {boundary_max[1]}, Boundary Y: {boundary_max[2]}\n")
 
+
+def print_no_buffer_output(boundary_max_list, boundary_max, county_name):
+    """Prints the high points without buffer"""
+    print("\nFive highest points within boundary:")
+    print_high_points(boundary_max_list) # Print the high points
+    print(f"Boundary Max: {boundary_max[0]}, Boundary X: {boundary_max[1]}, Boundary Y: {boundary_max[2]}")
+    county_name = county_name.replace(" ", "_")
+    write_text_file_no_buffer(boundary_max_list, boundary_max, county_name)
+
+    
 def print_output(boundary_max_list, buffer_max_list, boundary_max, buffer_max, buff_bound_distance, highPoint_distance):
     print("\nFive highest points within boundary:")
     print_high_points(boundary_max_list) # Print the high points

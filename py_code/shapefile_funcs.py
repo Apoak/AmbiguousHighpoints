@@ -1,17 +1,11 @@
 import os
-os.environ['PROJ_LIB'] = 'C:\\Users\\andre\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
-# os.environ['GDAL_DATA'] = 'C:\\Users\\Sai kiran\\anaconda3\\envs\sai\\Library\\share'
+os.environ['PROJ_LIB'] = 'C:\\Users\\andre\\OneDrive_CalPoly\\Documents\\SeniorProject\\Code\\pyGeo\\lib\\site-packages\\osgeo\\data\\proj'
+
 import numpy as np
 
 from multiprocessing import Pool
 from osgeo import gdal, ogr, osr
 from pathlib import Path
-
-SINGLE_FILE = "LiDAR/Storey/USGS_1M_11_x27y435_NV_WestCentral_EarthMRI_2020_D20.tif"
-TEST_DIR = Path("LiDAR/Storey")
-OUT_DIR = "reprojected/storey/"
-shp_path = "ShapeFiles/tl_2024_us_county.shp"
-SHP_OUT = "ShapeFiles/out/"
 
 def create_shapefile(object, path, type = None):
     """Create a shapefile from a boundary"""
@@ -54,54 +48,6 @@ def create_shapefile(object, path, type = None):
     data_source = None
     return path
 
-def reproject_shapefile(target, shapefile, flag, out_path=SHP_OUT + "boundary_webMercator.shp"):
-    # CONTAINS COUNTY FILTERING
-    """"Changes the shapefile projection to match the tif file and then creates a new shapefile"""
-    driver = ogr.GetDriverByName("ESRI Shapefile")
-    data_source = driver.Open(shapefile, 0)  # 0 means read-only mode
-    layer = data_source.GetLayer()
-
-    # Print geometries and attributes of each feature
-    if shapefile == shp_path:
-        layer.SetAttributeFilter("NAMELSAD = 'Storey County' AND STATEFP = '32'")
-
-    #set spatial reference and transformation
-    sourceprj = layer.GetSpatialRef()
-
-    # Target is a tif or shapefile
-    if flag == "tif":
-        targetprj = osr.SpatialReference(wkt = target.GetProjection())
-    else:
-        targetprj = target
-
-    transform = osr.CoordinateTransformation(sourceprj, targetprj)
-    # transform = osr.CoordinateTransformation(sourceprj, 'EPSG:3857')
-
-    to_fill = ogr.GetDriverByName("Esri Shapefile")
-    # out_path = SHP_OUT + "boundary_reprojected.shp"
-    ds = to_fill.CreateDataSource(out_path)
-    outlayer = ds.CreateLayer('', targetprj, ogr.wkbPolygon)
-    outlayer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
-
-    #apply transformation
-    i = 0
-
-    for feature in layer:
-        transformed = feature.GetGeometryRef()
-        transformed.Transform(transform)
-
-        geom = ogr.CreateGeometryFromWkb(transformed.ExportToWkb())
-        defn = outlayer.GetLayerDefn()
-        feat = ogr.Feature(defn)
-        feat.SetField('id', i)
-        feat.SetGeometry(geom)
-        outlayer.CreateFeature(feat)
-        i += 1
-        feat = None
-
-    ds = None
-    print("Shapefile reprojected successfully!")
-    return out_path
 
 def get_shapefile_layer(shapefile_path):
     # CONTAINS COUNTY FILTERING
@@ -120,6 +66,7 @@ def get_shapefile_layer(shapefile_path):
         data_source = None
         return polygon.Clone()
     # return layer.GetSpatialRef()
+
 
 def get_shapefile_metadata(shapefile_path):
     """Prints metadata of a shapefile"""
@@ -156,6 +103,7 @@ def get_shapefile_metadata(shapefile_path):
 
     data_source = None
 
+
 def shp_to_geojson(shapefile_path, out_path):
     """Convert a shapefile to GeoJSON"""
     driver = ogr.GetDriverByName("GeoJSON")
@@ -183,6 +131,7 @@ def shp_to_geojson(shapefile_path, out_path):
     shp_data_source = None
     print("Shapefile converted to GeoJSON successfully!")
 
+
 def geojson_to_shp(geojson_path, out_path):
     """Convert a GeoJSON file to a shapefile"""
     driver = ogr.GetDriverByName("ESRI Shapefile")
@@ -209,6 +158,7 @@ def geojson_to_shp(geojson_path, out_path):
     data_source = None
     geojson_data_source = None
     print("GeoJSON converted to shapefile successfully!")
+
 
 def create_gpkg(object, path):
     # Create the geometry: a linear ring + polygon
